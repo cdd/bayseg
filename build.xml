@@ -1,0 +1,51 @@
+<!--
+	BioAssay Template: Ant Build Script
+    
+    (c) 2015 Collaborative Drug Discovery Inc.
+
+    All rights reserved
+    
+    http://collaborativedrug.com
+-->
+
+<project name="CompositeBayesian" default="pkg" basedir=".">
+
+    <description>Collaborative Drug Discovery</description>
+
+    <property name="pkg" location="pkg"/>
+
+    <path id="project.class.path">
+    	<fileset dir="lib"> 
+	    	<include name="*.jar"/> 
+    	</fileset> 
+    </path>
+
+    <target name="init">
+		<tstamp/>
+    	<mkdir dir="bin"/>
+		<mkdir dir="pkg"/>
+    </target>
+    
+    <target name="build" depends="init" description="build the source">
+		<javac srcdir="src" destdir="bin" debug="on" encoding="8859_1" listfiles="on" includeantruntime="false" source="1.8" target="1.8">
+		    <classpath refid="project.class.path"/>
+		</javac>
+    </target>
+
+    <target name="pkg" depends="build" description="generate the packages">
+    	<jar jarfile="pkg/CompositeBayesian.jar" basedir="bin">
+    	    <manifest>
+    	    	<attribute name="Main-Class" value="com.cdd.bayes.Main"/>
+    	    </manifest>
+			<fileset dir="." includes="data/bao/**"/>
+            <fileset dir="." includes="images/*.png"/>
+			<zipgroupfileset dir="lib" includes="*.jar"/>
+		</jar>
+    </target>
+
+    <target name="clean" description="clean up">
+    	<delete dir="bin"/>
+    	<delete dir="pkg"/>
+    </target>
+
+</project>
