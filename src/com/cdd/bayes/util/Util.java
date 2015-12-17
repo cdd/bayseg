@@ -24,12 +24,12 @@
 
 package com.cdd.bayes.util;
 
-import java.awt.Color;
 import java.io.*;
 import java.lang.reflect.*;
 import java.text.*;
 import java.util.*;
 import javafx.scene.control.*;
+import javafx.scene.paint.*;
 
 /*
  * Static utilities to make life a little bit easier.
@@ -694,33 +694,6 @@ public class Util
 		return "#" + rep('0', 6 - str.length()) + str;
     }
 
-	/**
-	 * Merges two Color instances, to return a new Color with averaged values for red, green & blue.
-	 */    
-	public static Color mergeCols(Color col1, Color col2)
-	{
-		int r = col1.getRed() + col2.getRed(), g = col1.getGreen() + col2.getGreen(), b = col1.getBlue() + col2.getBlue();
-		return new Color(r / 2,g / 2,b / 2);
-	}
-    
-    /**
-     * Converts an integer colour of the form 0xTTRRGGBB into the Color object.
-     */
-	public static Color intToCol(int trgb)
-	{
-		int t = (trgb >> 24) & 0xFF, r = (trgb >> 16) & 0xFF, g = (trgb >> 8) & 0xFF, b = trgb & 0xFF;
-		return new Color(r,g,b,0xFF - t);
-	}
-    
-    /**
-     * Converts a Color object into an integer colour specifier of the form 0xTTRRGGBB.
-     */
-	public static int colToInt(Color col)
-	{
-		int t = 0xFF - col.getAlpha(), r = col.getRed(), g = col.getGreen(), b = col.getBlue();
-		return (t << 24) | (r << 16) | (g << 8) | b;
-	}
-    
     /**
      * Takes a colour of the form 0xTTRRGGBB and applies the offset for each of the three colour channels, making sure
      * each is still in the single byte range.
@@ -1019,6 +992,22 @@ public class Util
 		if (loose == null) return;
 		int len = 0;
 		for (int n = 0; n < loose.length; n++) if (loose[n] != null) packed[len++] = loose[n];
+	}
+
+	/**
+	 * Converts a TRGB value (0xTTRRGGBB) into a colour instance for JavaFX.
+	 */
+	public static Color rgbColor(int trgb)
+	{
+		final int t = (trgb >> 24) & 0xFF;
+		final int r = (trgb >> 16) & 0xFF;
+		final int g = (trgb >> 8) & 0xFF;
+		final int b = trgb & 0xFF;
+//zog		
+		if (t == 0)
+			return Color.rgb(r, g, b);
+		else
+			return Color.rgb(r, g, b, 1.0 - t/255.0);
 	}
 
 	/**

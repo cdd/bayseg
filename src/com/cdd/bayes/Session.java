@@ -26,6 +26,8 @@ package com.cdd.bayes;
 
 import com.cdd.bayes.util.*;
 
+import org.openscience.cdk.interfaces.IAtomContainer;
+
 import java.util.*;
 
 /*
@@ -44,12 +46,20 @@ public class Session
 		public String filename;
 		public int type; // one of FILE_*
 		public String field;
+		public List<IAtomContainer> molecules = new ArrayList<>(); // note: contains structure and fields from the SDfile, i.e. activity in there somewhere
+																   // constituent objects should be treated as immutable
 		
 		public DataFile(String filename, int type, String field)
 		{
 			this.filename = filename;
 			this.type = type;
 			this.field = field;
+		}
+		public DataFile clone()
+		{
+			DataFile dup = new DataFile(filename, type, field);
+			dup.molecules.addAll(molecules);
+			return dup;
 		}
 	}
 	private List<DataFile> files = new ArrayList<>();
@@ -62,12 +72,21 @@ public class Session
 	{
 	}
 	
+	public Session clone()
+	{
+		Session dup = new Session();
+		for (DataFile df : files) dup.files.add(df.clone());
+		dup.fraction = fraction;
+		return dup;
+	}
+	
 	// data files: these make up the input/output
 	public int numFiles() {return files.size();}
 	public DataFile getFile(int idx) {return files.get(idx);}
 	public void setFile(int idx, DataFile file) {files.set(idx, file);}
 	public void addFile(DataFile file) {files.add(file);}
 	public void deleteFile(int idx) {files.remove(idx);}
+	public Iterable<DataFile> fileIter() {return files;}
 	
 	// fraction of training set to push into the testing set
 	public float getFraction() {return fraction;}

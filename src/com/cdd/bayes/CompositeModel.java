@@ -50,9 +50,9 @@ public class CompositeModel
 
 	public static final class Entry
 	{
-		IAtomContainer mol;
-		double val;
-		int[] fp;
+		public IAtomContainer mol = null;
+		public double val = Double.NaN;
+		public int[] fp = null;
 	}
 
 	protected List<Entry> entries = new ArrayList<Entry>();
@@ -97,20 +97,33 @@ public class CompositeModel
 	// adds a single molecule & value to the collection of contents that will be operated upon
 	public void addEntry(IAtomContainer mol, double val)
 	{
-		// generate fingerprints and generate a sorted list of unique hash codes
+		Entry e = new Entry();
+		e.mol = mol;
+		e.val = val;
+		entries.add(e);
+	}
+	
+	// add an already-instantiated entry to the list
+	public void addEntry(Entry e)
+	{
+		fillFingerprints(e);
+		entries.add(e);
+	}
+	
+	// makes sure the fingerprint field is defined
+	public void fillFingerprints(Entry e)
+	{
+		if (e.fp != null) return;
+
 		CircularFingerprinter circ = new CircularFingerprinter(CircularFingerprinter.CLASS_ECFP6);
-		try {circ.calculate(mol);}
+		try {circ.calculate(e.mol);}
 		catch (CDKException ex) {throw new ModelException(ex);}
 		Set<Integer> fplist = new TreeSet<Integer>();
 		for (int n = circ.getFPCount() - 1; n >= 0; n--) fplist.add(circ.getFP(n).hashCode);
 
-		Entry e = new Entry();
-		e.mol = mol;
-		e.val = val;
 		e.fp = new int[fplist.size()];
 		int p = 0;
 		for (int h : fplist) e.fp[p++] = h;
-		entries.add(e);
 	}
 
 	// access to user-provided molecule/value/fingerprint content
