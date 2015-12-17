@@ -1057,4 +1057,39 @@ public class Util
         alert.setContentText(msg);
         alert.showAndWait();
 	}
+	
+	/**
+	 * Interpolates an RGB value between min, mid & max.
+	 */
+	public static int blendRGB(float f, int rgb1, int rgb2, int rgb3)
+    {
+    	if (f <= 0) return rgb1;
+    	if (f >= 1) return rgb3;
+    	if (f == 0.5f) return rgb2;
+    
+		final float ONE_OVER_255 = 1.0f / 0xFF;
+        
+        if (f < 0.5)
+        {
+            final float r1 = ((rgb1 >> 16) & 0xFF) * ONE_OVER_255, g1 = ((rgb1 >> 8) & 0xFF) * ONE_OVER_255, b1 = (rgb1 & 0xFF) * ONE_OVER_255;
+            final float r2 = ((rgb2 >> 16) & 0xFF) * ONE_OVER_255, g2 = ((rgb2 >> 8) & 0xFF) * ONE_OVER_255, b2 = (rgb2 & 0xFF) * ONE_OVER_255;
+
+            final float f2 = f * 2, f1 = 1 - f2;
+            final int R = (int)Math.round(0xFF * (f1 * r1 + f2 * r2));
+            final int G = (int)Math.round(0xFF * (f1 * g1 + f2 * g2));
+            final int B = (int)Math.round(0xFF * (f1 * b1 + f2 * b2));
+	        return (R << 16) | (G << 8) | B;
+        }
+        else // f > 0.5
+        {
+            final float r2 = ((rgb2 >> 16) & 0xFF) * ONE_OVER_255, g2 = ((rgb2 >> 8) & 0xFF) * ONE_OVER_255, b2 = (rgb2 & 0xFF) * ONE_OVER_255;
+            final float r3 = ((rgb3 >> 16) & 0xFF) * ONE_OVER_255, g3 = ((rgb3 >> 8) & 0xFF) * ONE_OVER_255, b3 = (rgb3 & 0xFF) * ONE_OVER_255;
+
+            final float f3 = (f - 0.5f) * 2, f2 = 1 - f3;
+            final int R = (int)Math.round(0xFF * (f2 * r2 + f3 * r3));
+            final int G = (int)Math.round(0xFF * (f2 * g2 + f3 * g3));
+            final int B = (int)Math.round(0xFF * (f2 * b2 + f3 * b3));
+	        return (R << 16) | (G << 8) | B;
+        }
+    }	
 }

@@ -120,8 +120,6 @@ public class CompositeWindow
 		stage.setScene(scene);
 
 		recreateContent();
-		
-		//new Thread(() -> backgroundLoadTemplates()).run();
  	}
 
 	// ------------ private methods ------------	
@@ -227,6 +225,7 @@ public class CompositeWindow
 		
 		Lineup line = new Lineup(PADDING);
 		textFraction = new TextField(String.valueOf(session.getFraction()));
+		textFraction.textProperty().addListener((observe, oldval, newval) -> changeFraction(newval));		
 		textFraction.setTooltip(new Tooltip("Fraction of training set set aside for testing."));
 		line.add(textFraction, "Reserve Testing Fraction:", 0, 0);
 		content.getChildren().add(line);
@@ -314,15 +313,19 @@ public class CompositeWindow
 			hbox.setAlignment(Pos.TOP_CENTER);
 			hbox.setSpacing(PADDING);
 			
+			FlowPane flow = new FlowPane();
 			RenderMatrix render = new RenderMatrix(model, training, false, invertDir);
 			render.draw();
-			hbox.getChildren().add(render.getCanvas());
+			flow.getChildren().addAll(render.getCanvas(), createTable(model, render));
+			hbox.getChildren().add(flow);
 			
 			if (testing.size() > 0)
 			{
+				flow = new FlowPane();
         		render = new RenderMatrix(model, testing, true, invertDir);
 				render.draw();
-        		hbox.getChildren().add(render.getCanvas());
+				flow.getChildren().addAll(render.getCanvas(), createTable(model, render));
+        		hbox.getChildren().add(flow);
 			}
 			
 			content.getChildren().add(hbox);
@@ -362,10 +365,54 @@ public class CompositeWindow
     			btnAddFile.setDisable(false);
     			btnLoad.setDisable(false);
     			btnBuild.setDisable(exec == null || exec.getTraining().size() < 5);
-    			btnPredict.setDisable(true); // !! IF available...
+    			btnPredict.setDisable(exec == null || exec.getModel() == null || exec.getPrediction().size() == 0);
     			btnSave.setDisable(true); // !! IF available... and there's an OUTPUT file
 			}
 		}
+	}
+	
+	private Node createTable(CompositeModel model, RenderMatrix render)
+	{
+		int nbins = model.numBins();
+		int[] offCounts = render.getOffCounts();
+		float[] offPortion = render.getOffPortion();
+		float[] offRandom = render.getOffRandom();
+		float[] enrichment = render.getEnrichment();
+		
+		GridPane grid = new GridPane();
+		grid.setHgap(PADDING);
+		grid.setVgap(PADDING);
+		//grid.setGridLinesVisible(true);
+		grid.setSnapToPixel(false);
+		grid.setPadding(new Insets(2));
+		grid.setBorder(new Border(new BorderStroke(Color.BLACK, BorderStrokeStyle.SOLID, CornerRadii.EMPTY, BorderWidths.DEFAULT)));
+		//grid.setStyle("-fx-border: 1px solid; -fx-border-color: black;");
+		
+		for (int n = 1; n <= 4; n++)
+		{
+			Label label = new Label(n == 1 ? "Count" : n == 2 ? "Portion" : n == 3 ? "Random" : "Enrichment");
+			label.setStyle("-fx-font-weight: bold;");
+			grid.add(label, n, 0);
+		}
+		
+		for (int n = 0; n < nbins; n++)
+		{
+			String txt = n == 0 ? "Correct bin" : " + off by " + n;
+			grid.add(new Label(txt), 0, n + 1);
+			
+			grid.add(new Label(String.valueOf(offCounts[n])), 1, n + 1);
+			grid.add(new Label(String.format("%.1f%%", 100 * offPortion[n])), 2, n + 1);
+			grid.add(new Label(String.format("%.1f%%", 100 * offRandom[n])), 3, n + 1);
+			grid.add(new Label(String.format("%.2f", enrichment[n])), 4, n + 1);
+		}
+		
+		for (Node node : grid.getChildren())
+		{
+			GridPane.setHalignment(node, HPos.CENTER);
+			GridPane.setValignment(node, VPos.CENTER);
+		}
+		
+		return grid;
 	}
 	
 	private void changeType(int idx, int type)
@@ -377,12 +424,21 @@ public class CompositeWindow
 		}
 		updateContent();
 	}
-	private void changeField(int idx, String field)
+	private void changeField(int idx, String value)
 	{
 		synchronized (mutex)
 		{
 			if (busy) return;
-			session.getFile(idx).field = field;
+			session.getFile(idx).field = value;
+		}
+	}
+	private void changeFraction(String value)
+	{
+		synchronized (mutex)
+		{
+			if (busy) return;
+			try {session.setFraction(Float.parseFloat(value));}
+			catch (NumberFormatException ex) {}
 		}
 	}
 
@@ -438,6 +494,7 @@ public class CompositeWindow
 	{
 		synchronized (mutex)
 		{
+			if (busy) return;
 			busy = true;
 		}
 		updateContent();
@@ -451,7 +508,8 @@ public class CompositeWindow
 				try {exec.loadFile(n);}
 				catch (IOException ex)
 				{
-					Util.informMessage("Load Failed", "For file [" + session.getFile(n).filename + "].\nReason: " + ex.getMessage());
+					final String fn = session.getFile(n).filename;
+			        Platform.runLater(() -> Util.informMessage("Load Failed", "For file [" + fn + "].\nReason: " + ex.getMessage()));
 					ex.printStackTrace();
 					break;
 				}
@@ -470,6 +528,7 @@ public class CompositeWindow
 	{
 		synchronized (mutex)
 		{
+			if (busy) return;
 			busy = true;
 		}
 		updateContent();
@@ -495,8 +554,26 @@ public class CompositeWindow
 	}
 	private void actionPredict()
 	{
+		synchronized (mutex)
+		{
+			if (busy) return;
+			if (exec == null) return;
+			List<CompositeModel.Entry> prediction = exec.getPrediction();
+			if (prediction.size() == 0)
+			{
+				Util.informWarning("Prediction", "There are no molecules to predict. Add a new file, and change the type Prediction.");
+				return;
+			}
+			CompositeModel model = exec.getModel();
+			if (model == null) return;
+			
+    		Stage stage = new Stage();
+    		PredictionWindow wnd = new PredictionWindow(stage, model, new ArrayList<CompositeModel.Entry>(prediction));
+    		stage.show();
+		}
 	}
 	private void actionSave()
 	{
+		// !!
 	}
 }

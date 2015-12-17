@@ -90,8 +90,8 @@ public class ExecuteSession
 				CompositeModel.Entry entry = parseEntry(mol, df.type, df.field);
 				if (entry == null) continue;
 				if (df.type == Session.FILE_TRAINING) training.add(entry);
-				else if (df.type == Session.FILE_TESTING) training.add(entry);
-				else if (df.type == Session.FILE_PREDICTION) training.add(entry);
+				else if (df.type == Session.FILE_TESTING) testing.add(entry);
+				else if (df.type == Session.FILE_PREDICTION) prediction.add(entry);
 			}
 		}
 		

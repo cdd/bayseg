@@ -60,6 +60,7 @@ public class RenderMatrix
 	private int[] binsz; // occupancy for each bin
 	private int[][] matrix; // hit/miss matrix
 	private int[] offcounts; // hit/miss counts
+	private float[] offportion, offrandom, enrichment;
 
 	// ------------ public methods ------------
 	
@@ -98,6 +99,11 @@ public class RenderMatrix
 	}
 	
 	public Canvas getCanvas() {return canvas;}
+	
+	public int[] getOffCounts() {return offcounts;}
+	public float[] getOffPortion() {return offportion;}
+	public float[] getOffRandom() {return offrandom;}
+	public float[] getEnrichment() {return enrichment;}
 	
 	// ------------ private methods ------------
 
@@ -179,7 +185,7 @@ public class RenderMatrix
     			float ideal = i == j ? binsz[i] : 0.5f * (binsz[i] + binsz[j]);
     			if (ideal == 0) continue;
     			float fract = Math.max(0, Math.min(1, pop / ideal));
-    			int rgb = blendRGB(fract, rgb1, rgb2, rgb3);
+    			int rgb = Util.blendRGB(fract, rgb1, rgb2, rgb3);
     			gc.setFill(Util.rgbColor(rgb));
     			gc.fillRect(x, y, w, h);
 			}
@@ -193,19 +199,6 @@ public class RenderMatrix
     		gc.restore();
 		}
 		
-		// matrix outline
-/*		
-		for (int n = 0; n <= nbins; n++)
-		{
-			float outbump = n == 0 ? 10 : 0;
-			float inbump = n > 0 && n < nbins ? 2 : 0;
-			vg.drawLine(-inbump, binp[n] + ypos, msz + outbump, binp[n] + ypos, 0x000000, 1);
-			vg.drawLine(binp[n], ypos, binp[n], ypos + msz + outbump, 0x000000, 1);
-		}
-		
-		vg.drawText(msz + 10, ypos - 4, "actual", fsz, 0x404040, TXTALIGN_RIGHT | TXTALIGN_BASELINE);
-		vg.drawText(4, ypos + msz + 2, "predicted", fsz, 0x404040, TXTALIGN_LEFT | TXTALIGN_TOP);*/
-
 		// draw the segmentation values
 		gc.save();
 		gc.setFont(font);
@@ -224,58 +217,26 @@ public class RenderMatrix
 		gc.fillText(Util.formatDouble(invertDir ? model.getMinVal() : model.getMaxVal(), 4), x0 + wh, segY);
 		gc.restore();
 
-/*
-		// now create the table of results
-		String[][] table = new String[nbins + 1][];
-		final int ncols = 5;
-		table[0] = new String[]{"", "Count", "Portion", "Random", "Enrichment"};
-		int totalCount = 0, totalPop = Vec.sum(datum.testBinSizes);
+		// now create the results for tabulation purposes
+		offportion = new float[nbins];
+		offrandom = new float[nbins];
+		enrichment = new float[nbins];
+
+		int totalCount = 0, totalPop = dataset.size();
 		float totalPortion = 0, totalRandom = 0;
 		for (int n = 0; n < nbins; n++)
 		{
-			String[] bits = new String[ncols];
-			bits[0] = n == 0 ? "Correct bin" : "+ off by " + n;
-
-			int count = usesTest ? datum.testOffsets[n] : datum.trainOffsets[n];
+			int count = offcounts[n];
 			float portion = (float)count / totalPop;
 			float random = n == 0 ? 1.0f / nbins : 2.0f * (nbins - n) / (nbins * nbins);
 			totalCount += count;
 			totalPortion += portion;
 			totalRandom += random;
-			float enrichment = totalPortion / totalRandom;
 
-			bits[1] = String.valueOf(totalCount);
-			bits[2] = String.format("%.1f %%", 100 * totalPortion);
-			bits[3] = String.format("%.1f %%", 100 * totalRandom);
-			bits[4] = String.format("%.2f", enrichment);
-			
-			table[n + 1] = bits;
+			offportion[n] = totalPortion;
+			offrandom[n] = totalRandom;
+			enrichment[n] = totalPortion / totalRandom;
 		}
-		float[] colWidth = new float[ncols];
-		float rowHeight = fsz + 10;
-		for (int r = 0; r < table.length; r++) for (int c = 0; c < ncols; c++)
-		{
-			colWidth[c] = Math.max(colWidth[c], vg.measureText(table[r][c], fsz)[0] + 10);
-		}
-		float[] colX = new float[ncols + 1];
-		colX[0] = msz + 50;
-		for (int n = 1; n <= ncols; n++) colX[n] = colX[n - 1] + colWidth[n - 1];
-		for (int r = 1; r <= table.length; r++)
-		{
-			float y = ypos + r * rowHeight;
-			vg.drawLine(colX[0], y, colX[ncols], y, 0x000000, 1);
-		}
-		for (int c = 0; c <= ncols; c++)
-		{
-			vg.drawLine(colX[c], ypos + rowHeight, colX[c], ypos + table.length * rowHeight, 0x000000, 1);
-		}
-		for (int r = 0; r < table.length; r++) for (int c = 0; c < ncols; c++)
-		{
-			float cx = colX[c] + 0.5f * colWidth[c], cy = ypos + (r + 0.5f) * rowHeight;
-			vg.drawText(cx, cy, table[r][c], fsz, 0x000000, TXTALIGN_CENTRE | TXTALIGN_MIDDLE);
-		}
-	
-		return msz + 2 * fsz;*/
 		
 		// boundary and dividers
 		gc.save();
@@ -292,36 +253,5 @@ public class RenderMatrix
 		gc.restore();
 	}
 	
-	private int blendRGB(float f, int rgb1, int rgb2, int rgb3)
-    {
-    	if (f <= 0) return rgb1;
-    	if (f >= 1) return rgb3;
-    	if (f == 0.5f) return rgb2;
-    
-		final float ONE_OVER_255 = 1.0f / 0xFF;
-        
-        if (f < 0.5)
-        {
-            final float r1 = ((rgb1 >> 16) & 0xFF) * ONE_OVER_255, g1 = ((rgb1 >> 8) & 0xFF) * ONE_OVER_255, b1 = (rgb1 & 0xFF) * ONE_OVER_255;
-            final float r2 = ((rgb2 >> 16) & 0xFF) * ONE_OVER_255, g2 = ((rgb2 >> 8) & 0xFF) * ONE_OVER_255, b2 = (rgb2 & 0xFF) * ONE_OVER_255;
-
-            final float f2 = f * 2, f1 = 1 - f2;
-            final int R = (int)Math.round(0xFF * (f1 * r1 + f2 * r2));
-            final int G = (int)Math.round(0xFF * (f1 * g1 + f2 * g2));
-            final int B = (int)Math.round(0xFF * (f1 * b1 + f2 * b2));
-	        return (R << 16) | (G << 8) | B;
-        }
-        else // f > 0.5
-        {
-            final float r2 = ((rgb2 >> 16) & 0xFF) * ONE_OVER_255, g2 = ((rgb2 >> 8) & 0xFF) * ONE_OVER_255, b2 = (rgb2 & 0xFF) * ONE_OVER_255;
-            final float r3 = ((rgb3 >> 16) & 0xFF) * ONE_OVER_255, g3 = ((rgb3 >> 8) & 0xFF) * ONE_OVER_255, b3 = (rgb3 & 0xFF) * ONE_OVER_255;
-
-            final float f3 = (f - 0.5f) * 2, f2 = 1 - f3;
-            final int R = (int)Math.round(0xFF * (f2 * r2 + f3 * r3));
-            final int G = (int)Math.round(0xFF * (f2 * g2 + f3 * g3));
-            final int B = (int)Math.round(0xFF * (f2 * b2 + f3 * b3));
-	        return (R << 16) | (G << 8) | B;
-        }
-    }	
 }
 
