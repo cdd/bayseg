@@ -24,10 +24,13 @@
 
 package com.cdd.bayes;
 
+import com.cdd.bayes.util.*;
+
 import java.util.*;
 import java.io.*;
 
 import org.openscience.cdk.interfaces.IAtomContainer;
+import org.openscience.cdk.io.SDFWriter;
 import org.openscience.cdk.io.iterator.IteratingSDFReader;
 import org.openscience.cdk.exception.CDKException;
 import org.openscience.cdk.DefaultChemObjectBuilder;
@@ -116,6 +119,55 @@ public class ExecuteSession
 		for (CompositeModel.Entry e : training) model.addEntry(e);
 		model.determineSegments();
 		model.calculate();
+	}
+	
+	// performs predictions and then saves the results
+	public void saveOutput(String filename, String field) throws CDKException, IOException
+	{
+		FileWriter wtr = new FileWriter(filename);
+		@SuppressWarnings("resource") // (complains sdf not closed, even though this is untrue; bug in CDK?)
+		SDFWriter sdf = new SDFWriter(wtr);
+
+		double[] segments = model.getSegments();
+
+		for (CompositeModel.Entry e : prediction)
+		{
+			IAtomContainer mol = null;
+			try {mol = e.mol.clone();}
+			catch (CloneNotSupportedException ex) {throw new CDKException("Clone failed", ex);}
+
+			float[] pred = model.predictBins(mol);
+			int best = 0;
+			for (int n = 1; n < pred.length; n++) if (pred[n] > pred[best]) best = n;
+
+			// score = best * (best / sum of all): the "best" value is a probabiliy (0..1), and if all other probabilities are zero, it can stand as-is; to the extent
+			//									   that other options are viable, it decreases proportionately
+			float score = Math.max(0, Math.min(1, pred[best]));
+			if (score > 0)
+			{
+				float denom = 0;
+				for (float f : pred) denom += Math.max(0, Math.min(1, f));
+				score *= score / denom;
+			}
+
+			double min = best == 0 ? model.getMinVal() : segments[best - 1];
+			double max = best == segments.length ? model.getMaxVal() : segments[best];
+			String txtRange = Util.formatDouble(min, 4) + " .. " + Util.formatDouble(max, 4);
+			String txtScore = String.format("%.1f%%", 100 * score);
+				
+			//Map<Object, Object> props = new HashMap<>(mol.getProperties());
+			Map<Object, Object> props = new TreeMap<>();
+			for (Object key : mol.getProperties().keySet()) {Object val = mol.getProperties().get(key); if (val != null) props.put(key, val);}
+			
+			props.put(field + "_Range", txtRange);
+			props.put(field + "_Score", txtScore);
+			
+			mol.setProperties(props);
+
+			sdf.write(mol);
+		}
+		
+        sdf.close();
 	}
 	
 	// ------------ private methods ------------

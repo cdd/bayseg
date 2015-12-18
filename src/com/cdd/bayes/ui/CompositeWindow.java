@@ -366,7 +366,7 @@ public class CompositeWindow
     			btnLoad.setDisable(false);
     			btnBuild.setDisable(exec == null || exec.getTraining().size() < 5);
     			btnPredict.setDisable(exec == null || exec.getModel() == null || exec.getPrediction().size() == 0);
-    			btnSave.setDisable(true); // !! IF available... and there's an OUTPUT file
+    			btnSave.setDisable(exec == null || exec.getModel() == null || exec.getPrediction().size() == 0);
 			}
 		}
 	}
@@ -540,7 +540,7 @@ public class CompositeWindow
 			try {exec.buildModel();}
 			catch (Exception ex)
 			{
-				Util.informMessage("Model Build Failed", "Reason: " + ex.getMessage());
+		        Platform.runLater(() -> Util.informMessage("Model Build Failed", "Reason: " + ex.getMessage()));
 				ex.printStackTrace();
 			}
 		
@@ -561,7 +561,7 @@ public class CompositeWindow
 			List<CompositeModel.Entry> prediction = exec.getPrediction();
 			if (prediction.size() == 0)
 			{
-				Util.informWarning("Prediction", "There are no molecules to predict. Add a new file, and change the type Prediction.");
+				Util.informWarning("Prediction", "There are no molecules to predict. Add a new file, and change the type to Prediction.");
 				return;
 			}
 			CompositeModel model = exec.getModel();
@@ -574,6 +574,81 @@ public class CompositeWindow
 	}
 	private void actionSave()
 	{
-		// !!
+		synchronized (mutex)
+		{
+			if (busy) return;
+		}
+	
+		if (exec == null) return;
+		if (exec.getPrediction().size() == 0)
+		{
+			Util.informWarning("Save", "There are no molecules to predict. Add a new file, and change the type to Prediction.");
+			return;
+		}
+		CompositeModel model = exec.getModel();
+		if (model == null)
+		{
+			Util.informWarning("Save", "Build a model first.");
+			return;
+		}
+	
+		String fn = null, field = "Prediction";
+		for (int n = 0; n < session.numFiles(); n++)
+		{
+			Session.DataFile df = session.getFile(n);
+			if (df.type == Session.FILE_OUTPUT)
+			{
+				fn = df.filename;
+				if (df.field.length() > 0) field = df.field;
+				break;
+			}
+		}
+		
+		if (fn == null)
+		{
+            FileChooser chooser = new FileChooser();
+        	chooser.setTitle("Save Predictions");
+        	
+        	File file = chooser.showSaveDialog(stage);
+    		if (file == null) return;
+    		fn = file.getPath();
+    		if (!fn.endsWith(".sdf")) fn += ".sdf";
+		}
+		
+		synchronized (mutex)
+		{
+			busy = true;
+		}
+		updateContent();
+
+		final String ufn = fn, ufield = field;
+		new Thread(() ->
+		{
+			Exception fail = null;
+			try {exec.saveOutput(ufn, ufield);}
+			catch (Exception ex) {fail = ex;}
+		
+			synchronized (mutex)
+			{
+				busy = false;
+			}
+			
+			Exception ufail = fail;
+	        Platform.runLater(() -> 
+	        {
+	        	recreateContent();
+
+				if (ufail == null)
+				{
+					Util.informMessage("Saved", "Written predictions to " + ufn);
+				}
+				else
+    			{
+    				Util.informMessage("Output Save Failed", "Reason: " + ufail.getMessage());
+    				ufail.printStackTrace();
+    			}
+	        });
+	        
+		}).start();
 	}
 }

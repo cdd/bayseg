@@ -41,6 +41,7 @@ import javafx.scene.input.*;
 import javafx.scene.layout.*;
 import javafx.scene.paint.*;
 import javafx.scene.shape.*;
+import javafx.scene.image.*;
 import javafx.application.*;
 import javafx.beans.value.*;
 import javafx.util.*;
@@ -50,6 +51,10 @@ import org.controlsfx.control.*;
 
 import org.openscience.cdk.interfaces.IAtomContainer;
 import org.openscience.cdk.exception.CDKException;
+import org.openscience.cdk.renderer.generators.*;
+import org.openscience.cdk.renderer.*;
+import org.openscience.cdk.renderer.font.*;
+import org.openscience.cdk.renderer.visitor.*;
 
 /*
  * Computes a bunch of predictions for a set of molecules, and displays them in list form, to be perused.
@@ -75,7 +80,7 @@ public class PredictionWindow
     	CDKException exception = null;
     	int best;
     	float score;
-    	Canvas chart;
+    	Canvas chart, diagram;
     }
     private List<Prediction> predictions = new ArrayList<>(), incoming = new ArrayList<>();
 
@@ -139,15 +144,22 @@ public class PredictionWindow
 			//String note = p.pred != null ? Arrays.toString(p.pred) : p.exception != null ? p.exception.getMessage() : "?";
 			//hbox.getChildren().add(new Label(note));
 			
-			if (p.chart != null) hbox.getChildren().add(p.chart);
+			if (p.diagram != null) hbox.getChildren().add(p.diagram);
 
 			if (p.pred != null) 
 			{
+				VBox vbox = new VBox();
+				vbox.setSpacing(PADDING);
+			
+				if (p.chart != null) vbox.getChildren().add(p.chart);
+
 				double[] segments = model.getSegments();
 				double min = p.best == 0 ? model.getMinVal() : segments[p.best - 1];
 				double max = p.best == segments.length ? model.getMaxVal() : segments[p.best];
 				String txt = Util.formatDouble(min, 4) + " .. " + Util.formatDouble(max, 4) + String.format(" (%.1f%%)", 100 * p.score);
-				hbox.getChildren().add(new Label(txt));
+				vbox.getChildren().add(new Label(txt));
+				
+				hbox.getChildren().add(vbox);
 			}
 			
 			content.getChildren().add(hbox);
@@ -201,9 +213,8 @@ public class PredictionWindow
 				}
 			
 				p.chart = renderPredictions(p.pred);
+				p.diagram = renderMolecule(p.mol);
 			}
-			// !! do the prediction
-			// ... and other stuff: rendering
 				
 			synchronized (mutex)
 			{
@@ -217,19 +228,19 @@ public class PredictionWindow
 	{
 		final int nbins = pred.length;
 		final double barW = Math.max(20, 150 / nbins), barH = 80, edge = 5;
-		final double totalW = nbins * barW + 2 * edge, totalH = barH;
+		final double width = nbins * barW + 2 * edge, height = barH;
 	
-		Canvas canvas = new Canvas(totalW, totalH);
+		Canvas canvas = new Canvas(width, height);
 		GraphicsContext gc = canvas.getGraphicsContext2D();
 		
 		gc.setFill(Color.WHITE);
-		gc.fillRect(0, 0, totalW, totalH);
+		gc.fillRect(0, 0, width, height);
 		
 		for (int n = 0; n < nbins; n++)
 		{
 			float f = Math.max(0, Math.min(1, pred[n]));
 			double x = edge + barW * n, w = barW;
-			double h = (totalH - 1) * f, y = totalH - 0.5 - h;
+			double h = (height - 1) * f, y = height - 0.5 - h;
 
 			int bg = Util.blendRGB(f, 0xFF0000, 0xFFFF00, 0x00FF00);
 			gc.setFill(Util.rgbColor(bg));
@@ -242,8 +253,48 @@ public class PredictionWindow
 		
 		gc.setStroke(Color.BLACK);
 		gc.setLineWidth(1);
-		//gc.strokeLine(0, totalH - 0.5, totalW, totalH - 0.5);
-		gc.strokeRect(0.5, 0.5, totalW - 1, totalH - 1);
+		gc.strokeRect(0.5, 0.5, width - 1, height - 1);
+		
+		return canvas;
+	}
+	
+	private Canvas renderMolecule(IAtomContainer mol)
+	{
+		int width = 300, height = 200;
+	
+		Canvas canvas = new Canvas(width, height);
+		GraphicsContext gc = canvas.getGraphicsContext2D();
+		
+		gc.setFill(Color.WHITE);
+		gc.fillRect(0, 0, width, height);
+
+        List<IGenerator<IAtomContainer>> generators = new ArrayList<IGenerator<IAtomContainer>>();
+        generators.add(new BasicSceneGenerator());
+        generators.add(new BasicAtomGenerator());
+        generators.add(new BasicBondGenerator());
+        generators.add(new AtomNumberGenerator()); 
+        generators.add(new ExtendedAtomGenerator()); 
+		
+        AtomContainerRenderer renderer=new AtomContainerRenderer(generators,new AWTFontManager());
+		renderer.getRenderer2DModel().set(AtomNumberGenerator.WillDrawAtomNumbers.class,Boolean.FALSE);
+
+		// render onto the AWT canvas (yucky but necessary)
+		java.awt.image.BufferedImage awtimg = new java.awt.image.BufferedImage(width, height, java.awt.image.BufferedImage.TYPE_INT_ARGB);
+		java.awt.Graphics2D g = (java.awt.Graphics2D)awtimg.getGraphics();
+		g.setRenderingHint(java.awt.RenderingHints.KEY_ANTIALIASING, java.awt.RenderingHints.VALUE_ANTIALIAS_ON);
+		g.setRenderingHint(java.awt.RenderingHints.KEY_STROKE_CONTROL, java.awt.RenderingHints.VALUE_STROKE_PURE);
+		
+		java.awt.Rectangle box = new java.awt.Rectangle(3, 3, width - 6, height - 6);
+        renderer.setup(mol, box);
+        renderer.paint(mol, new AWTDrawVisitor(g), box, true);
+
+		WritableImage wimg = new WritableImage(width, height);
+		javafx.embed.swing.SwingFXUtils.toFXImage(awtimg, wimg);
+		gc.drawImage(wimg, 0, 0);
+            
+		gc.setStroke(Color.BLACK);
+		gc.setLineWidth(1);
+		gc.strokeRect(0.5, 0.5, width - 1, height - 1);
 		
 		return canvas;
 	}
