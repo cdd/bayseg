@@ -86,7 +86,7 @@ public class ExecuteSession
 		for (Session.DataFile df : session.fileIter())
 		{
 			if (df.type == Session.FILE_OUTPUT) continue;
-			if (df.type != Session.FILE_PREDICTION && df.field.length() == 0) continue;
+			if (df.type != Session.FILE_PREDICTION && (df.field == null || df.field.length() == 0)) continue;
 			
 			for (IAtomContainer mol : df.molecules)
 			{
@@ -113,11 +113,11 @@ public class ExecuteSession
 	}
 	
 	// stuff all the training set entries into the model and build it
-	public void buildModel() throws CDKException
+	public void buildModel(double[] segments) throws CDKException
 	{
 		model = new CompositeModel();
 		for (CompositeModel.Entry e : training) model.addEntry(e);
-		model.determineSegments();
+		if (segments == null) model.determineSegments(); else model.setSegments(segments);
 		model.calculate();
 	}
 	
@@ -129,6 +129,7 @@ public class ExecuteSession
 		SDFWriter sdf = new SDFWriter(wtr);
 
 		double[] segments = model.getSegments();
+		boolean invertDir = model.getMinVal() > 0 && model.getMaxVal() / model.getMinVal() > 15;
 
 		for (CompositeModel.Entry e : prediction)
 		{
@@ -152,7 +153,7 @@ public class ExecuteSession
 
 			double min = best == 0 ? model.getMinVal() : segments[best - 1];
 			double max = best == segments.length ? model.getMaxVal() : segments[best];
-			String txtRange = Util.formatDouble(min, 4) + " .. " + Util.formatDouble(max, 4);
+			String txtRange = Util.formatDouble(invertDir ? max : min, 4) + " .. " + Util.formatDouble(invertDir ? min : max, 4);
 			String txtScore = String.format("%.1f%%", 100 * score);
 				
 			//Map<Object, Object> props = new HashMap<>(mol.getProperties());
@@ -161,6 +162,13 @@ public class ExecuteSession
 			
 			props.put(field + "_Range", txtRange);
 			props.put(field + "_Score", txtScore);
+			
+			for (int n = 0; n < pred.length; n++)
+			{
+				double bmin = n == 0 ? model.getMinVal() : segments[n - 1];
+				double bmax = n == segments.length ? model.getMaxVal() : segments[n];
+				props.put(field + "_Bin" + n + "_" + Util.formatDouble(invertDir ? bmax : bmin, 4) + ".." + Util.formatDouble(invertDir ? bmin : bmax, 4), Util.formatDouble(pred[n], 4));
+			}
 			
 			mol.setProperties(props);
 

@@ -103,7 +103,7 @@ public class Main
 			}
 		}
 		
-		if (openWindow)
+		if (openWindow || session.numFiles() == 0)
 		{
 			MainApplication.templateSession = session;
 			new MainApplication().exec(new String[0]);

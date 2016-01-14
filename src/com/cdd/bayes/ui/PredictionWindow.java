@@ -67,6 +67,7 @@ public class PredictionWindow
     private Stage stage;
 	private CompositeModel model;
 	private List<CompositeModel.Entry> molecules;
+	private boolean invertDir;
 
     private VBox content = new VBox();
     private Label labelStatus = new Label();
@@ -120,6 +121,9 @@ public class PredictionWindow
 
 		//recreateContent();
 		
+		double minVal = model.getMinVal(), maxVal = model.getMaxVal();
+		invertDir = minVal > 0 && maxVal / minVal > 15;
+		
 		new Thread(() -> makePredictions()).start();
  	}
 
@@ -154,9 +158,10 @@ public class PredictionWindow
 				if (p.chart != null) vbox.getChildren().add(p.chart);
 
 				double[] segments = model.getSegments();
-				double min = p.best == 0 ? model.getMinVal() : segments[p.best - 1];
-				double max = p.best == segments.length ? model.getMaxVal() : segments[p.best];
-				String txt = Util.formatDouble(min, 4) + " .. " + Util.formatDouble(max, 4) + String.format(" (%.1f%%)", 100 * p.score);
+				double minVal = p.best == 0 ? model.getMinVal() : segments[p.best - 1];
+				double maxVal = p.best == segments.length ? model.getMaxVal() : segments[p.best];
+
+				String txt = Util.formatDouble(invertDir ? maxVal : minVal, 4) + " .. " + Util.formatDouble(invertDir ? minVal : maxVal, 4) + String.format(" (%.1f%%)", 100 * p.score);
 				vbox.getChildren().add(new Label(txt));
 				
 				hbox.getChildren().add(vbox);
@@ -238,7 +243,8 @@ public class PredictionWindow
 		
 		for (int n = 0; n < nbins; n++)
 		{
-			float f = Math.max(0, Math.min(1, pred[n]));
+			int i = invertDir ? nbins - 1 - n : n;
+			float f = Math.max(0, Math.min(1, pred[i]));
 			double x = edge + barW * n, w = barW;
 			double h = (height - 1) * f, y = height - 0.5 - h;
 

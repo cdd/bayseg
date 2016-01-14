@@ -80,6 +80,9 @@ public class CompositeWindow
     }
     private List<FileGroup> fileGroups = new ArrayList<>();
     private TextField textFraction;
+	private CheckBox chkBoundaries = new CheckBox("Boundaries:");
+	private TextField textBoundaries = new TextField("");
+
     private Button btnAddFile, btnLoad, btnBuild, btnPredict, btnSave;
 
     private Object mutex = new String("!");
@@ -223,12 +226,23 @@ public class CompositeWindow
 			//content.getChildren().add(new Rectangle(0, 10)); // spacer
 		}
 		
-		Lineup line = new Lineup(PADDING);
+		//Lineup line = new Lineup(PADDING);
+		RowLine row = new RowLine(PADDING, PADDING);
 		textFraction = new TextField(String.valueOf(session.getFraction()));
 		textFraction.textProperty().addListener((observe, oldval, newval) -> changeFraction(newval));		
 		textFraction.setTooltip(new Tooltip("Fraction of training set set aside for testing."));
-		line.add(textFraction, "Reserve Testing Fraction:", 0, 0);
-		content.getChildren().add(line);
+		textFraction.setPrefWidth(70);
+		//line.add(textFraction, "Reserve Fraction:", 0, 0);
+		row.add(new Label("Reserve Fraction:"));
+		row.add(textFraction, 0);
+		chkBoundaries.setOnAction((event) -> textBoundaries.setDisable(!chkBoundaries.isSelected()));
+		Tooltip binTip = new Tooltip("Activity boundaries for bins (comma-separated)");
+		textBoundaries.setTooltip(binTip);
+		chkBoundaries.setTooltip(binTip);
+		textBoundaries.setDisable(!chkBoundaries.isSelected());
+		row.add(chkBoundaries);
+		row.add(textBoundaries, 1);
+		content.getChildren().add(row);
 
 		content.getChildren().add(new Separator());
 
@@ -304,6 +318,13 @@ public class CompositeWindow
 			hbox.setAlignment(Pos.TOP_CENTER);
 			hbox.getChildren().add(render.getCanvas());
 			content.getChildren().add(hbox);
+			
+			if (segments != null)
+			{
+				String bounds = "";
+				for (double d : segments) bounds += (bounds.length() == 0 ? "" : ",") + Util.formatDouble(d, 5);
+				textBoundaries.setText(bounds);
+			}
 		}
 		
 		// show the cross validation matrices
@@ -526,6 +547,32 @@ public class CompositeWindow
 	}
 	private void actionBuild()
 	{
+		// see if the user has prespecified the boundaries
+		double[] segments = null;
+		if (chkBoundaries.isSelected())
+		{
+			String str = textBoundaries.getText();
+			if (str.length() > 0)
+			{
+				String[] lines = str.split(",");
+				if (lines.length < 2)
+				{
+					Util.informMessage("Invalid", "Entering boundaries: there must be at least 2 values, separated by commas.");
+					return;
+				}
+			
+				segments = new double[lines.length];
+				try {for (int n = 0; n < segments.length; n++) segments[n] = Double.parseDouble(lines[n]);}
+				catch (NumberFormatException ex)
+				{
+					Util.informMessage("Invalid", "Entering boundaries: must all be valid numbers");
+					return;
+				}
+				Arrays.sort(segments);
+			}
+		}
+		final double[] preseg = segments;
+
 		synchronized (mutex)
 		{
 			if (busy) return;
@@ -537,7 +584,7 @@ public class CompositeWindow
 		{
 			if (exec == null) exec = new ExecuteSession(session);
 		
-			try {exec.buildModel();}
+			try {exec.buildModel(preseg);}
 			catch (Exception ex)
 			{
 		        Platform.runLater(() -> Util.informMessage("Model Build Failed", "Reason: " + ex.getMessage()));
