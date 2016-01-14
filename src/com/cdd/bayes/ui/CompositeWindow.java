@@ -1,7 +1,7 @@
 /*
  * Bayesian Composite Models
  * 
- * (c) 2015 Collaborative Drug Discovery, Inc.
+ * (c) 2015-2016 Collaborative Drug Discovery, Inc.
  *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public License
